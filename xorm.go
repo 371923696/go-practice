@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"strconv"
 	"time"
 
 	"github.com/go-xorm/core"
@@ -58,14 +60,16 @@ func connect_database() *xorm.Engine {
 
 	en, err := xorm.NewEngine("postgres", dbinfo)
 	if err != nil {
-		glog.Fatalln("engine creation failed", err)
+		glog.Fatalln("engine creation failed", err.Error())
 	}
 
 	err = en.Ping()
 	if err != nil {
-		glog.Fatalln("Connect to database failed", err)
+		glog.Fatalln("Connect to database failed", err.Error())
 	} else {
-		en.SetMapper(core.SameMapper{})
+		//en.SetTableMapper(core.SameMapper{})
+		//en.SetColumnMapper(core.GonicMapper{})
+		en.SetMapper(core.GonicMapper{})
 	}
 
 	glog.Infoln("successfully connected to postgres database.")
@@ -78,7 +82,7 @@ func sync_tables(en *xorm.Engine) {
 	err = en.Sync(new(Book_info))
 
 	if err != nil {
-		glog.Fatalln("creation error", err)
+		glog.Fatalln("creation error", err.Error())
 		return
 	}
 
@@ -114,9 +118,127 @@ func insert_multiple_data(en *xorm.Engine) {
 	glog.Infoln("insertion multiple data. affected:", affected)
 }
 
+func query_single_data(en *xorm.Engine) {
+	user := User_info{Uid: 1104029, Dept: "CSE"}
+	has, err := en.Get(&user)
+	if err != nil {
+		glog.Fatalln("query failed.", err.Error())
+	}
+
+	glog.Infoln(has)
+	glog.Infoln(user)
+}
+
+func query_multiple_data(en *xorm.Engine) {
+	var users []User_info
+	err := en.Find(&users)
+	if err != nil {
+		glog.Fatalln("find user info failed.", err.Error())
+	}
+
+	for index, user := range users {
+		glog.Infoln(index, user)
+	}
+}
+
+func query_conditional_data(en *xorm.Engine) {
+	var err error
+
+	var tenusers []User_info
+	//err = en.Cols("Uid", "Name").Where("Dept = ?", "CSE").Limit(10).Find(&tenusers)
+	err = en.Cols("Uid", "Name").Where("Dept = ?", "CSE").Limit(10).Find(&tenusers)
+	if err != nil {
+		glog.Fatalln("query condition failed.", err.Error())
+	}
+
+	for index, user := range tenusers {
+		glog.Infoln(index, user.Uid, user.Name)
+	}
+
+}
+
+func query_exec_sql(en *xorm.Engine) {
+	sql := "select * from user_info"
+	results, err := en.QueryString(sql)
+	if err != nil {
+		glog.Fatalln("query exec sql failed.", err.Error())
+	}
+
+	for index, result := range results {
+		glog.Infoln(index, result)
+	}
+}
+
+func join_User_Library(en *xorm.Engine) {
+	var users []User_library
+	err := en.Join("INNER", "library_info", "library_info.student_id = user_info.uid").Join("INNER", "book_info", "book_info.book_id = library_info.book_id").Find(&users)
+	if err != nil {
+		glog.Fatalln(err)
+	}
+	//log.Println(users)
+
+	for _, user := range users {
+		glog.Infoln(user)
+	}
+}
+
+func update_data(en *xorm.Engine) {
+	user := new(User_info)
+	user.Name = "zhen.zhang"
+	affected, err := en.Id(1104029).Update(user)
+	if err != nil {
+		glog.Fatalln("update failed.", err.Error())
+	}
+	glog.Infoln("affected row: ", affected)
+
+}
+
+func delete_data(en *xorm.Engine) {
+	affected, err := en.Id(1104029).Delete(&User_info{})
+	if err != nil {
+		glog.Fatalln("delete failed.", err.Error())
+	}
+
+	glog.Infoln("delete affected:", affected)
+}
+
+func sql_command(en *xorm.Engine) {
+	//en.Query for select, en.Exec for insert, update or delete
+	sql := "select * from user_info"
+	results, _ := en.Query(sql)
+
+	for _, result := range results {
+		//convert results []map[string][]byte to users []UserInfo
+		var user User_info
+		user.Uid, _ = strconv.ParseInt(string(result["uid"]), 10, 64) //10 base, 64bit
+		user.Name = string(result["name"])
+		user.Dept = string(result["dept"])
+
+		layout := "2006-01-02T15:04:05Z"
+		user.UpdatedAt, _ = time.Parse(layout, string(result["updated_at"]))
+		user.CreatedAt, _ = time.Parse(layout, string(result["created_at"]))
+
+		log.Println(user)
+	}
+
+	//Exec for update
+	sql = "update user_info set name=? where uid=?"
+	res, _ := en.Exec(sql, "Mynul Hasan", 1104009)
+	log.Println("affected", res)
+}
+
 func main() {
 	en := connect_database()
-	sync_tables(en)
-	insert_data(en)
-	insert_multiple_data(en)
+	//sync_tables(en)
+	//insert_data(en)
+	//insert_multiple_data(en)
+	//query_single_data(en)
+	//query_multiple_data(en)
+	//query_conditional_data(en)
+	//query_exec_sql(en)
+	join_User_Library(en)
+	//update_data(en)
+	//delete_data(en)
+	//sql_command(en)
+
 }
